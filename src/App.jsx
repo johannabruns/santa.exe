@@ -52,7 +52,7 @@ const getCardFrontImage = (day, charId) => {
 // Ermittelt, bis zu welchem Tag geöffnet werden darf
 const calculateAllowedDay = () => {
   // ACHTUNG: VOR DEM VERSCHICKEN AUF "false" SETZEN!
-  const DEBUG_MODE = true; 
+  const DEBUG_MODE = false; 
 
   if (DEBUG_MODE) return 24; // Zum Testen ist alles offen
 
@@ -670,7 +670,7 @@ export default function SantaExeApp() {
   const [currentDay, setCurrentDay] = useState(1);
   
   const getAvailableDay = () => {
-    const DEBUG_MODE = true; 
+    const DEBUG_MODE = false; 
     if (DEBUG_MODE) return 24; 
 
     const now = new Date();
