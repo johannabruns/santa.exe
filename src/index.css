@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Hintergrund-Setup */
+body {
+  background-color: #0F172A; /* Grundfarbe Dunkelblau */
+  color: white;
+  margin: 0;
+  overflow: hidden; /* App-Feeling: Kein Scrollen des Body */
+}
+
+/* Sternenhimmel Overlay */
+.stars-overlay {
+  background-image: url('/bg_stars.png');
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Scrollbar verstecken (für Clean Look) */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* 3D Flip Karte Animation */
+.perspective-1000 {
+  perspective: 1000px;
+}
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+.backface-hidden {
+  backface-visibility: hidden;
+}
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
