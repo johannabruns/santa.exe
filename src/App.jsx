@@ -699,7 +699,7 @@ export default function SantaExeApp() {
     if (DEBUG_MODE) return 24; 
 
     // TEST-DUMMY: Tu so, als wäre heute der 1. Dezember
-    const now = new Date('2024-12-01'); 
+    const now = new Date('2024-12-3'); 
     // const now = new Date(); // <-- VOR RELEASE WIEDER AKTIVIEREN
 
     const month = now.getMonth(); 
