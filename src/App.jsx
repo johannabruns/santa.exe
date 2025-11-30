@@ -688,7 +688,8 @@ export default function SantaExeApp() {
     const DEBUG_MODE = false; 
     if (DEBUG_MODE) return 24; 
 
-    const now = new Date();
+    const now = new Date('2024-12-01');
+    //const now = new Date();
     const month = now.getMonth(); 
     const date = now.getDate();
 
