@@ -660,42 +660,53 @@ const PuzzleFriendQuiz = ({ char, onSolve }) => {
   );
 };
 
-const STORAGE_KEY = 'SANTA_EXE_SAVE_DATA_V1';
+// ... (oberer Teil mit Config bleibt gleich)
+
+// --- MAIN APP MIT INTELLIGENTEM SPEICHER ---
+
+const STORAGE_KEY = 'SANTA_EXE_SAVE_DATA_V2'; // Neue Version V2 (setzt alten Spielstand zurück für sauberen Test)
 
 export default function SantaExeApp() {
-  // 1. Lade gespeicherte Daten direkt beim Start
+  
+  // 1. Daten laden
   const loadSaveData = () => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       return saved ? JSON.parse(saved) : null;
     } catch (e) {
-      console.error("Savegame corrupted", e);
       return null;
     }
   };
 
   const saveData = loadSaveData();
 
-  // 2. Initialisiere State mit den gespeicherten Daten (oder Default-Werten)
+  // 2. State
   const [screen, setScreen] = useState('splash'); 
   const [char, setChar] = useState(saveData?.char || null);
-  const [pills, setPills] = useState(saveData?.pills || 0);
+  
+  // NEU: Wir merken uns genau, WELCHE Tage fertig sind
+  const [completedDays, setCompletedDays] = useState(saveData?.completedDays || []);
+  
+  // Pillen berechnen wir live aus den fertigen Tagen (kein State mehr nötig, verhindert Fehler)
+  const pills = completedDays.length;
+
+  // Der aktuelle Tag, der im Kalender offen ist (Fortschritt)
   const [currentDay, setCurrentDay] = useState(saveData?.currentDay || 1);
 
-  // Hilfsfunktion: Berechnet das heutige Datum für die Türchen-Logik (bleibt dynamisch)
+  // Datum Logik (Test-Modus beachten!)
   const getAvailableDay = () => {
-    // ACHTUNG: VOR DEM VERSCHICKEN AUF "false" SETZEN!
-    const DEBUG_MODE = false; 
+    const DEBUG_MODE = false; // Auf true für Testen aller Tage
     if (DEBUG_MODE) return 24; 
 
-    const now = new Date('2024-12-01');
-    //const now = new Date();
+    // TEST-DUMMY: Tu so, als wäre heute der 1. Dezember
+    const now = new Date('2024-12-01'); 
+    // const now = new Date(); // <-- VOR RELEASE WIEDER AKTIVIEREN
+
     const month = now.getMonth(); 
     const date = now.getDate();
 
-    if (month < 11) return 0; // Vor Dezember
-    if (month > 11) return 24; // Nach Dezember
-    
+    if (month < 11) return 0; 
+    if (month > 11) return 24;
     return Math.min(date, 24);
   };
 
@@ -704,78 +715,76 @@ export default function SantaExeApp() {
   const [isFlipped, setIsFlipped] = useState(false);
   const scrollRef = useRef(null);
 
-  // Aktualisiere das erlaubte Datum, wenn sich der Screen ändert (falls App lange offen ist)
   useEffect(() => {
     setMaxUnlockedDay(getAvailableDay());
   }, [screen]);
 
-  // 3. AUTO-SAVE EFFEKT: Speichert jedes Mal, wenn sich wichtiger Fortschritt ändert
+  // 3. AUTO-SAVE (Jetzt mit completedDays)
   useEffect(() => {
     if (char) {
-      const gameState = {
-        char: char,
-        pills: pills,
-        currentDay: currentDay
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(gameState));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        char,
+        completedDays,
+        currentDay
+      }));
     }
-  }, [char, pills, currentDay]);
+  }, [char, completedDays, currentDay]);
 
-  // Scroll-Logik für Home Screen
   useEffect(() => {
     if (screen === 'home' && scrollRef.current) {
       setTimeout(() => scrollRef.current.scrollTop = scrollRef.current.scrollHeight, 50);
     }
   }, [screen]);
 
-  // 4. Angepasste Start-Logik
   const handleAppStart = () => {
-    // Wenn wir schon einen Charakter geladen haben (aus dem Speicher),
-    // springen wir direkt zum Home Screen und überspringen Intro/Auswahl.
-    if (char) {
-      setScreen('home');
-    } else {
-      setScreen('introLetter');
-    }
+    if (char) setScreen('home');
+    else setScreen('introLetter');
   };
 
-  const handleNextDay = () => {
-    setIsFlipped(false);
-    // Fortschritt erhöhen (nur wenn wir nicht schon am Ende sind)
-    if (selectedDay === currentDay) {
-        setCurrentDay(d => Math.min(d + 1, 24));
+  // --- NEUE LOGIK: Wenn ein Rätsel gelöst wurde ---
+  const handlePuzzleSolved = () => {
+    // Wenn wir diesen Tag zum ersten Mal lösen:
+    if (selectedDay && !completedDays.includes(selectedDay)) {
+      const newCompleted = [...completedDays, selectedDay];
+      setCompletedDays(newCompleted);
+      
+      // Kalender-Fortschritt erhöhen (nächster Tag wird frei)
+      if (selectedDay === currentDay) {
+         setCurrentDay(d => Math.min(d + 1, 24));
+      }
     }
-    setPills(p => Math.min(p + 1, 24));
-    setScreen('home');
+    
+    // Gehe zum Reveal Screen
+    setScreen('reveal');
   };
 
+  // --- NEUE LOGIK: Wenn man im Menü klickt ---
   const handleRoomClick = (day) => {
-    // Prüfen ob Datum schon erreicht (Kalender)
     if (day > maxUnlockedDay) {
         alert("Nicht schummeln! Dieser Tag ist noch nicht dran.");
         return;
     }
-    
-    // Optional: Prüfen ob vorherige Rätsel gelöst wurden (Fortschritt)
-    // Wenn du willst, dass sie Tag 5 nicht öffnen können, bevor Tag 4 gelöst ist:
-    /* if (day > currentDay) {
-       alert("Du musst erst die vorherigen Tage lösen!");
-       return;
-    }
-    */
-    
+
     setSelectedDay(day);
 
-    // Sonderlogik für Tag 1 (Intro Dialog) nur beim allerersten Mal
-    // Da currentDay gespeichert wird, wird der Dialog nicht wiederholt, 
-    // wenn currentDay schon > 1 ist.
-    if (day === 1 && currentDay === 1 && screen !== 'home') {
-        setScreen('dialog');
-    } else if (day === 1 && currentDay === 1) {
-        setScreen('dialog');
+    // CHECK: Haben wir den Tag schon erledigt?
+    if (completedDays.includes(day)) {
+        // JA -> Direkt zur Belohnung springen (Replay verhindern)
+        setIsFlipped(true); // Karte direkt umgedreht zeigen
+        setScreen('reveal');
     } else {
-        setScreen('puzzle');
+        // NEIN -> Spiel starten
+        setIsFlipped(false); // Karte verdeckt
+        
+        // Tag 1 Sonderbehandlung (Dialog)
+        if (day === 1 && screen !== 'home') setScreen('dialog'); // Falls noch nie gesehen
+        else if (day === 1) setScreen('dialog');
+        else setScreen('puzzle');
     }
+  };
+
+  const handleBackToHome = () => {
+    setScreen('home');
   };
 
   // --- RENDERING ---
@@ -784,11 +793,14 @@ export default function SantaExeApp() {
   if (screen === 'introLetter') return <IntroLetter onNext={() => setScreen('select')} />;
   if (screen === 'select') return <CharSelect onSelect={(c) => { setChar(c); setScreen('home'); }} />;
   if (screen === 'dialog') return <Day1Dialog char={char} onComplete={() => setScreen('lawLetter')} />;
-  if (screen === 'lawLetter') return <LawLetter onComplete={() => setScreen('reveal')} />;
+  if (screen === 'lawLetter') return <LawLetter onComplete={() => setScreen('reveal')} />; // Nach Brief direkt zu Reveal (Day 1 Logic)
 
   const images = selectedDay ? getRoomImages(selectedDay) : null;
   const puzzleConfig = selectedDay ? PUZZLES[selectedDay] : null;
   const isSearchGame = puzzleConfig?.type === 'SEARCH';
+  
+  // Prüfen ob wir im "Replay Modus" sind (für den Text auf dem Reveal Screen)
+  const isReplay = completedDays.includes(selectedDay);
 
   return (
     <div className="h-screen w-full text-white font-sans flex flex-col relative overflow-hidden bg-slate-950">
@@ -797,7 +809,6 @@ export default function SantaExeApp() {
           <header className="h-20 bg-black/40 backdrop-blur-md flex items-center justify-between px-4 shrink-0 z-20 border-b border-white/10">
             <div className="flex items-center gap-3 relative translate-y-2">
               <div className="w-20 h-20 rounded-full border-2 border-white/30 overflow-hidden bg-black shadow-lg transform translate-y-2">
-                {/* Fallback Image falls keins geladen ist */}
                 <img src={char?.img || '/splashscreen_icon.png'} className="w-full h-full object-cover object-top" alt="Avatar" />
               </div>
               <span className="font-bold text-lg drop-shadow-md mt-2">{char?.name}</span>
@@ -805,17 +816,14 @@ export default function SantaExeApp() {
             <div className="flex items-center gap-2 bg-black/40 px-3 py-1 rounded-full border border-white/10">
                 <span>💊</span><span className="font-mono font-bold text-pink-400">{pills} / 24</span>
             </div>
-            
-            {/* DEBUG RESET BUTTON (Nur für Entwicklung, kann man später rausnehmen) */}
-            {/* <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="absolute top-2 right-2 text-[8px] opacity-30">RESET</button> 
-            */}
           </header>
 
           <div ref={scrollRef} className="flex-1 overflow-y-auto no-scrollbar relative px-4 pb-32 scroll-smooth">
             <div className="flex flex-col w-full max-w-sm mx-auto mt-20 gap-3">
               
               <div onClick={() => handleRoomClick(24)} className={`relative h-40 w-full transition-transform cursor-pointer ${24 > maxUnlockedDay ? 'opacity-50 grayscale' : 'hover:scale-[1.02]'}`}>
-                 <img src="/gift_red.png" className="w-full h-full object-cover rounded-xl shadow-lg border-2 border-yellow-500/50" alt="Day 24" />
+                 {/* Wenn erledigt, zeigen wir einen kleinen Haken oder lassen es einfach bunt */}
+                 <img src="/gift_red.png" className={`w-full h-full object-cover rounded-xl shadow-lg border-2 ${completedDays.includes(24) ? 'border-green-500 brightness-110' : 'border-yellow-500/50'}`} alt="Day 24" />
                  <div className="absolute inset-0 flex items-center justify-center">
                     {24 > maxUnlockedDay ? <Lock className="text-white/50 w-10 h-10" /> : <span className="font-black text-white text-5xl drop-shadow-lg">24</span>}
                  </div>
@@ -825,10 +833,11 @@ export default function SantaExeApp() {
                 {Array.from({ length: 22 }, (_, i) => {
                   const day = 23 - i;
                   const isLocked = day > maxUnlockedDay;
+                  const isDone = completedDays.includes(day);
                   
                   return (
                     <div key={day} onClick={() => handleRoomClick(day)} className={`relative h-32 transition-transform active:scale-95 cursor-pointer ${isLocked ? 'opacity-60 grayscale brightness-75' : 'hover:brightness-110'}`}>
-                     <img src={`/${getGiftImage(day)}`} className="w-full h-full object-cover rounded-lg shadow-md border border-white/10" alt={`Day ${day}`} />
+                     <img src={`/${getGiftImage(day)}`} className={`w-full h-full object-cover rounded-lg shadow-md border ${isDone ? 'border-green-400/50' : 'border-white/10'}`} alt={`Day ${day}`} />
                       <div className="absolute inset-0 flex items-center justify-center">
                         {isLocked ? <Lock className="text-black/30 w-8 h-8" /> : <span className="font-black text-white text-3xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{day}</span>}
                       </div>
@@ -839,7 +848,7 @@ export default function SantaExeApp() {
 
               <div className="flex justify-center mt-2">
                  <div onClick={() => handleRoomClick(1)} className={`relative h-32 w-1/2 transition-transform active:scale-95 cursor-pointer ${1 > maxUnlockedDay ? 'opacity-60' : 'hover:scale-105'}`}>
-                   <img src="/gift_yellow.png" className="w-full h-full object-cover rounded-lg shadow-xl border-2 border-yellow-200" alt="Day 1" />
+                   <img src="/gift_yellow.png" className={`w-full h-full object-cover rounded-lg shadow-xl border-2 ${completedDays.includes(1) ? 'border-green-400' : 'border-yellow-200'}`} alt="Day 1" />
                    <div className="absolute inset-0 flex items-center justify-center">
                       {1 > maxUnlockedDay ? <Lock className="text-black/30 w-8 h-8" /> : <span className="font-black text-white text-4xl drop-shadow-lg">1</span>}
                    </div>
@@ -875,17 +884,18 @@ export default function SantaExeApp() {
              )}
 
              <div className="relative z-10 flex-1 flex flex-col w-full h-full">
-                {puzzleConfig?.type === 'WORDLE' ? <PuzzleWordle config={puzzleConfig} onSolve={() => setScreen('reveal')} /> : 
-                 puzzleConfig?.type === 'SEARCH' ? <PuzzleSearch config={puzzleConfig} onSolve={() => setScreen('reveal')} /> :
-                 puzzleConfig?.type === 'MEMORY' ? <PuzzleMemory config={puzzleConfig} onSolve={() => setScreen('reveal')} /> :
-                 puzzleConfig?.type === 'CODE' ? <PuzzleCode config={puzzleConfig} onSolve={() => setScreen('reveal')} /> :
-                 puzzleConfig?.type === 'RIDDLE' ? <PuzzleRiddle config={puzzleConfig} onSolve={() => setScreen('reveal')} /> :
-                 puzzleConfig?.type === 'QUIZ' ? <PuzzleQuiz config={puzzleConfig} onSolve={() => setScreen('reveal')} /> :
-                 puzzleConfig?.type === 'FRIEND_QUIZ' ? <PuzzleFriendQuiz char={char} onSolve={() => setScreen('reveal')} /> :
-                 puzzleConfig?.type === 'MAZE' ? <PuzzleMaze config={puzzleConfig} onSolve={() => setScreen('reveal')} /> :
-                 puzzleConfig?.type === 'LETTER' ? <PuzzleLetter config={puzzleConfig} onSolve={() => setScreen('reveal')} /> :
-                 puzzleConfig?.type === 'FINAL' ? <PuzzleFinal config={puzzleConfig} char={char} onSolve={() => setScreen('reveal')} /> :
-                 <div className="flex items-center justify-center h-full"><button onClick={() => setScreen('reveal')} className="bg-white text-black p-4 rounded shadow-lg font-bold">Skip (Platzhalter)</button></div>
+                {/* WICHTIG: Hier geben wir handlePuzzleSolved statt setScreen weiter */}
+                {puzzleConfig?.type === 'WORDLE' ? <PuzzleWordle config={puzzleConfig} onSolve={handlePuzzleSolved} /> : 
+                 puzzleConfig?.type === 'SEARCH' ? <PuzzleSearch config={puzzleConfig} onSolve={handlePuzzleSolved} /> :
+                 puzzleConfig?.type === 'MEMORY' ? <PuzzleMemory config={puzzleConfig} onSolve={handlePuzzleSolved} /> :
+                 puzzleConfig?.type === 'CODE' ? <PuzzleCode config={puzzleConfig} onSolve={handlePuzzleSolved} /> :
+                 puzzleConfig?.type === 'RIDDLE' ? <PuzzleRiddle config={puzzleConfig} onSolve={handlePuzzleSolved} /> :
+                 puzzleConfig?.type === 'QUIZ' ? <PuzzleQuiz config={puzzleConfig} onSolve={handlePuzzleSolved} /> :
+                 puzzleConfig?.type === 'FRIEND_QUIZ' ? <PuzzleFriendQuiz char={char} onSolve={handlePuzzleSolved} /> :
+                 puzzleConfig?.type === 'MAZE' ? <PuzzleMaze config={puzzleConfig} onSolve={handlePuzzleSolved} /> :
+                 puzzleConfig?.type === 'LETTER' ? <PuzzleLetter config={puzzleConfig} onSolve={handlePuzzleSolved} /> :
+                 puzzleConfig?.type === 'FINAL' ? <PuzzleFinal config={puzzleConfig} char={char} onSolve={handlePuzzleSolved} /> :
+                 <div className="flex items-center justify-center h-full"><button onClick={handlePuzzleSolved} className="bg-white text-black p-4 rounded shadow-lg font-bold">Skip (Platzhalter)</button></div>
                 }
              </div>
           </div>
@@ -895,18 +905,28 @@ export default function SantaExeApp() {
       {/* REVEAL SCREEN */}
       {screen === 'reveal' && (
         <div className="flex-1 flex flex-col items-center justify-center bg-black/95 p-4 w-full h-full absolute z-50" onClick={() => !isFlipped && setIsFlipped(true)}>
+          
+          {/* Dein gewünschter Text, wenn das Level schon fertig war */}
+          {isReplay && (
+            <div className="absolute top-20 bg-green-900/80 px-6 py-3 rounded-xl border border-green-500 backdrop-blur-md mb-8 animate-in slide-in-from-top duration-700 z-50">
+               <p className="text-green-100 font-bold text-center">✅ Du hast Santa für heute schon seine Pille gegeben.</p>
+            </div>
+          )}
+
           <div className={`relative w-72 h-96 md:h-[450px] transition-all duration-700 preserve-3d cursor-pointer ${isFlipped ? 'rotate-y-180' : ''}`}>
              <div className="absolute inset-0 backface-hidden rounded-xl border-[6px] border-[#5B2323] bg-[#fff7da] flex items-center justify-center overflow-hidden">
                <img src="/card_backside.png" className="w-full h-full object-cover" alt="Card Back" />
              </div>
-             <div className="absolute inset-0 backface-hidden rotate-y-180 rounded-xl border-[6px] border-[#5B2323] bg-[#fff7da] flex items-center justify-center overflow-hidden">
+             <div className="absolute inset-0 backface-hidden rotate-y-180 rounded-xl border-[6px] border-[#5B2323] bg-[#fff7da] flex items-center justify-center overflow-hidden shadow-[0_0_50px_rgba(255,255,255,0.2)]">
                <img src={getCardFrontImage(selectedDay, char?.id)} className="w-3/4 h-3/4 object-contain" alt="Card Front" />
              </div>
           </div>
+          
           {!isFlipped && <p className="mt-8 text-white/70 animate-pulse font-bold tracking-widest text-sm uppercase">Tippen zum Öffnen</p>}
+          
           {isFlipped && (
             <div className="mt-8">
-               <img src="/button_next.png" onClick={handleNextDay} className="w-40 cursor-pointer hover:scale-105 transition-transform drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] animate-pulse" alt="Weiter" />
+               <img src="/button_next.png" onClick={handleBackToHome} className="w-40 cursor-pointer hover:scale-105 transition-transform drop-shadow-[0_0_15px_rgba(255,255,255,0.3)] animate-pulse" alt="Weiter" />
             </div>
           )}
         </div>
