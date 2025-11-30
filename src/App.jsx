@@ -660,11 +660,10 @@ const PuzzleFriendQuiz = ({ char, onSolve }) => {
   );
 };
 
-// ... (oberer Teil bleibt gleich) ...
 
-// --- MAIN APP (FINAL FIX) ---
+// --- MAIN APP ---
 
-const STORAGE_KEY = 'SANTA_EXE_SAVE_DATA_V3'; // V3 für frischen Start beim Testen
+const STORAGE_KEY = 'SANTA_EXE_SAVE_DATA_V4';
 
 export default function SantaExeApp() {
   
@@ -693,10 +692,8 @@ export default function SantaExeApp() {
   const getAvailableDay = () => {
     const DEBUG_MODE = false; 
     if (DEBUG_MODE) return 24; 
-
-    // TEST-DUMMY:
-    const now = new Date('2024-12-03'); 
-    // const now = new Date(); // <-- VOR RELEASE WIEDER AKTIVIEREN
+    
+    const now = new Date();
 
     const month = now.getMonth(); 
     const date = now.getDate();
