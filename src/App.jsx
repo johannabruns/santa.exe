@@ -660,15 +660,14 @@ const PuzzleFriendQuiz = ({ char, onSolve }) => {
   );
 };
 
-// ... (oberer Teil mit Config bleibt gleich)
+// ... (oberer Teil bleibt gleich) ...
 
-// --- MAIN APP MIT INTELLIGENTEM SPEICHER ---
+// --- MAIN APP (FINAL FIX) ---
 
-const STORAGE_KEY = 'SANTA_EXE_SAVE_DATA_V2'; // Neue Version V2 (setzt alten Spielstand zurück für sauberen Test)
+const STORAGE_KEY = 'SANTA_EXE_SAVE_DATA_V3'; // V3 für frischen Start beim Testen
 
 export default function SantaExeApp() {
   
-  // 1. Daten laden
   const loadSaveData = () => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -680,26 +679,23 @@ export default function SantaExeApp() {
 
   const saveData = loadSaveData();
 
-  // 2. State
+  // State
   const [screen, setScreen] = useState('splash'); 
   const [char, setChar] = useState(saveData?.char || null);
-  
-  // NEU: Wir merken uns genau, WELCHE Tage fertig sind
   const [completedDays, setCompletedDays] = useState(saveData?.completedDays || []);
-  
-  // Pillen berechnen wir live aus den fertigen Tagen (kein State mehr nötig, verhindert Fehler)
   const pills = completedDays.length;
-
-  // Der aktuelle Tag, der im Kalender offen ist (Fortschritt)
   const [currentDay, setCurrentDay] = useState(saveData?.currentDay || 1);
 
-  // Datum Logik (Test-Modus beachten!)
+  // NEU: Status um zu unterscheiden, ob wir gerade spielen oder nur gucken
+  const [isReplayMode, setIsReplayMode] = useState(false);
+
+  // Datum Logik (Bitte anpassen für Tests)
   const getAvailableDay = () => {
-    const DEBUG_MODE = false; // Auf true für Testen aller Tage
+    const DEBUG_MODE = false; 
     if (DEBUG_MODE) return 24; 
 
-    // TEST-DUMMY: Tu so, als wäre heute der 1. Dezember
-    const now = new Date('2024-12-3'); 
+    // TEST-DUMMY:
+    const now = new Date('2024-12-03'); 
     // const now = new Date(); // <-- VOR RELEASE WIEDER AKTIVIEREN
 
     const month = now.getMonth(); 
@@ -719,7 +715,7 @@ export default function SantaExeApp() {
     setMaxUnlockedDay(getAvailableDay());
   }, [screen]);
 
-  // 3. AUTO-SAVE (Jetzt mit completedDays)
+  // Auto-Save
   useEffect(() => {
     if (char) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -741,24 +737,22 @@ export default function SantaExeApp() {
     else setScreen('introLetter');
   };
 
-  // --- NEUE LOGIK: Wenn ein Rätsel gelöst wurde ---
+  // Wird aufgerufen, wenn ein Puzzle (ODER Tag 1) geschafft ist
   const handlePuzzleSolved = () => {
-    // Wenn wir diesen Tag zum ersten Mal lösen:
+    // Nur speichern, wenn noch nicht in der Liste
     if (selectedDay && !completedDays.includes(selectedDay)) {
       const newCompleted = [...completedDays, selectedDay];
       setCompletedDays(newCompleted);
       
-      // Kalender-Fortschritt erhöhen (nächster Tag wird frei)
       if (selectedDay === currentDay) {
          setCurrentDay(d => Math.min(d + 1, 24));
       }
     }
-    
-    // Gehe zum Reveal Screen
+    // Wir kommen gerade vom Lösen -> also KEIN Replay Modus
+    setIsReplayMode(false); 
     setScreen('reveal');
   };
 
-  // --- NEUE LOGIK: Wenn man im Menü klickt ---
   const handleRoomClick = (day) => {
     if (day > maxUnlockedDay) {
         alert("Nicht schummeln! Dieser Tag ist noch nicht dran.");
@@ -769,15 +763,16 @@ export default function SantaExeApp() {
 
     // CHECK: Haben wir den Tag schon erledigt?
     if (completedDays.includes(day)) {
-        // JA -> Direkt zur Belohnung springen (Replay verhindern)
-        setIsFlipped(true); // Karte direkt umgedreht zeigen
+        // JA -> Replay Modus an!
+        setIsReplayMode(true); 
+        setIsFlipped(true);
         setScreen('reveal');
     } else {
-        // NEIN -> Spiel starten
-        setIsFlipped(false); // Karte verdeckt
+        // NEIN -> Neues Spiel
+        setIsReplayMode(false);
+        setIsFlipped(false);
         
-        // Tag 1 Sonderbehandlung (Dialog)
-        if (day === 1 && screen !== 'home') setScreen('dialog'); // Falls noch nie gesehen
+        if (day === 1 && screen !== 'home') setScreen('dialog');
         else if (day === 1) setScreen('dialog');
         else setScreen('puzzle');
     }
@@ -792,16 +787,16 @@ export default function SantaExeApp() {
   if (screen === 'splash') return <SplashScreen onStart={handleAppStart} />;
   if (screen === 'introLetter') return <IntroLetter onNext={() => setScreen('select')} />;
   if (screen === 'select') return <CharSelect onSelect={(c) => { setChar(c); setScreen('home'); }} />;
+  
   if (screen === 'dialog') return <Day1Dialog char={char} onComplete={() => setScreen('lawLetter')} />;
-  if (screen === 'lawLetter') return <LawLetter onComplete={() => setScreen('reveal')} />; // Nach Brief direkt zu Reveal (Day 1 Logic)
+  
+  // FIX FÜR TAG 1: Hier rufen wir jetzt handlePuzzleSolved auf!
+  if (screen === 'lawLetter') return <LawLetter onComplete={handlePuzzleSolved} />;
 
   const images = selectedDay ? getRoomImages(selectedDay) : null;
   const puzzleConfig = selectedDay ? PUZZLES[selectedDay] : null;
   const isSearchGame = puzzleConfig?.type === 'SEARCH';
   
-  // Prüfen ob wir im "Replay Modus" sind (für den Text auf dem Reveal Screen)
-  const isReplay = completedDays.includes(selectedDay);
-
   return (
     <div className="h-screen w-full text-white font-sans flex flex-col relative overflow-hidden bg-slate-950">
       {screen === 'home' && (
@@ -822,7 +817,6 @@ export default function SantaExeApp() {
             <div className="flex flex-col w-full max-w-sm mx-auto mt-20 gap-3">
               
               <div onClick={() => handleRoomClick(24)} className={`relative h-40 w-full transition-transform cursor-pointer ${24 > maxUnlockedDay ? 'opacity-50 grayscale' : 'hover:scale-[1.02]'}`}>
-                 {/* Wenn erledigt, zeigen wir einen kleinen Haken oder lassen es einfach bunt */}
                  <img src="/gift_red.png" className={`w-full h-full object-cover rounded-xl shadow-lg border-2 ${completedDays.includes(24) ? 'border-green-500 brightness-110' : 'border-yellow-500/50'}`} alt="Day 24" />
                  <div className="absolute inset-0 flex items-center justify-center">
                     {24 > maxUnlockedDay ? <Lock className="text-white/50 w-10 h-10" /> : <span className="font-black text-white text-5xl drop-shadow-lg">24</span>}
@@ -884,7 +878,6 @@ export default function SantaExeApp() {
              )}
 
              <div className="relative z-10 flex-1 flex flex-col w-full h-full">
-                {/* WICHTIG: Hier geben wir handlePuzzleSolved statt setScreen weiter */}
                 {puzzleConfig?.type === 'WORDLE' ? <PuzzleWordle config={puzzleConfig} onSolve={handlePuzzleSolved} /> : 
                  puzzleConfig?.type === 'SEARCH' ? <PuzzleSearch config={puzzleConfig} onSolve={handlePuzzleSolved} /> :
                  puzzleConfig?.type === 'MEMORY' ? <PuzzleMemory config={puzzleConfig} onSolve={handlePuzzleSolved} /> :
@@ -906,8 +899,8 @@ export default function SantaExeApp() {
       {screen === 'reveal' && (
         <div className="flex-1 flex flex-col items-center justify-center bg-black/95 p-4 w-full h-full absolute z-50" onClick={() => !isFlipped && setIsFlipped(true)}>
           
-          {/* Dein gewünschter Text, wenn das Level schon fertig war */}
-          {isReplay && (
+          {/* Nachricht NUR anzeigen, wenn wir im Replay Modus sind */}
+          {isReplayMode && (
             <div className="absolute top-20 bg-green-900/80 px-6 py-3 rounded-xl border border-green-500 backdrop-blur-md mb-8 animate-in slide-in-from-top duration-700 z-50">
                <p className="text-green-100 font-bold text-center">✅ Du hast Santa für heute schon seine Pille gegeben.</p>
             </div>
